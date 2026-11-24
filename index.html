@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f4ef" />
+    <meta name="description" content="独立实时录音转写与翻译界面" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23172b2a'/%3E%3Cpath d='M8 13v6M13 8v16M19 11v10M24 14v4' stroke='%23e66e4b' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <title>声译 · 实时转写翻译</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="声译首页">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span>声译</span>
+          <span class="brand-en">LIVE INTERPRETER</span>
+        </a>
+        <div class="session-state" id="sessionState"><span></span>准备就绪</div>
+      </header>
+
+      <section class="workspace" aria-label="实时转写翻译工作区">
+        <div class="heading-row">
+          <div>
+            <p class="eyebrow">SPEAK. UNDERSTAND. CONNECT.</p>
+            <h1>说出来，即刻听懂。</h1>
+          </div>
+          <div class="timer" aria-label="录音时长"><span class="timer-dot"></span><span id="timer">00:00</span></div>
+        </div>
+
+        <div class="language-bar">
+          <label class="language-select">
+            <span>说话语言</span>
+            <select id="sourceLanguage" aria-label="说话语言">
+              <option value="zh-CN">中文（普通话）</option>
+              <option value="en-US">English</option>
+              <option value="yue-Hant-HK">粤语</option>
+              <option value="ja-JP">日本語</option>
+              <option value="ko-KR">한국어</option>
+              <option value="fr-FR">Français</option>
+              <option value="de-DE">Deutsch</option>
+              <option value="es-ES">Español</option>
+            </select>
+          </label>
+          <div class="language-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+          </div>
+          <label class="language-select">
+            <span>翻译成</span>
+            <select id="targetLanguage" aria-label="目标语言">
+              <option value="English">English</option>
+              <option value="简体中文">简体中文</option>
+              <option value="繁體中文">繁體中文</option>
+              <option value="日本語">日本語</option>
+              <option value="한국어">한국어</option>
+              <option value="Français">Français</option>
+              <option value="Deutsch">Deutsch</option>
+              <option value="Español">Español</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="transcript-grid">
+          <section class="transcript-panel source-panel">
+            <header><span class="panel-index">01</span><h2>实时原文</h2><span class="panel-tag" id="sourceTag">中文</span></header>
+            <div class="transcript-scroll" id="sourceTranscript" aria-live="polite">
+              <div class="empty-state" id="sourceEmpty">
+                <span class="empty-icon"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></svg></span>
+                <p>点击下方麦克风<br />开始说话，原文会出现在这里</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="transcript-panel target-panel">
+            <header><span class="panel-index">02</span><h2>同步译文</h2><span class="panel-tag accent" id="targetTag">EN</span></header>
+            <div class="transcript-scroll" id="targetTranscript" aria-live="polite">
+              <div class="empty-state" id="targetEmpty">
+                <span class="empty-icon translate-icon">A<span>文</span></span>
+                <p>译文将随原文同步生成<br />无需复制或切换页面</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="message-row">
+          <p id="statusMessage" role="status">点击开始，并允许浏览器使用麦克风</p>
+          <span id="supportNote">中英互译 · 离线可用</span>
+        </div>
+      </section>
+
+      <footer class="control-bar">
+        <div class="utility-actions left-actions">
+          <button class="text-button" id="clearButton" disabled>
+            <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v5M14 11v5"/></svg>
+            新会话
+          </button>
+        </div>
+
+        <div class="record-control">
+          <div class="waveform" id="waveform" aria-hidden="true"></div>
+          <button class="record-button" id="recordButton" aria-label="开始录音转写">
+            <svg class="mic-icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></svg>
+            <span class="stop-icon"></span>
+          </button>
+          <span class="record-label" id="recordLabel">开始转写</span>
+        </div>
+
+        <div class="utility-actions right-actions">
+          <button class="text-button" id="copyButton" disabled>
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            复制
+          </button>
+          <button class="text-button" id="exportButton" disabled>
+            <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            导出
+          </button>
+        </div>
+      </footer>
+      <div class="privacy-note">语音识别由浏览器服务处理；中英文互译可在本机离线完成</div>
+    </main>
+    <div class="toast" id="toast" role="status"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
