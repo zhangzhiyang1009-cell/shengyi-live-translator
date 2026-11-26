@@ -77,7 +77,7 @@ h1 { font-size: clamp(25px, 3vw, 35px); line-height: 1.25; letter-spacing: -.04e
 .transcript-panel h2 { font-size: 13px; margin: 0; font-weight: 600; }
 .panel-tag { margin-left: auto; color: #87918b; background: #f2f3ef; border-radius: 4px; padding: 3px 7px; font-size: 10px; }
 .panel-tag.accent { color: #b85c40; background: #fff1eb; }
-.transcript-scroll { padding: 22px 24px; height: 310px; max-height: 38vh; overflow-y: auto; scroll-behavior: smooth; }
+.transcript-scroll { padding: 22px 24px; height: 310px; max-height: 38vh; overflow-y: auto; scroll-behavior: auto; }
 .empty-state { height: 100%; min-height: 210px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #a0a9a3; }
 .empty-state p { font-size: 12px; line-height: 1.9; margin: 15px 0 0; }
 .empty-icon { width: 46px; height: 46px; border: 1px solid #e6e9e3; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9aa59e; }

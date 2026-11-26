@@ -58,6 +58,10 @@ const translationRequests = new Map();
 let backendAvailable = true;
 let backendCheckTimer;
 let backendCheckInFlight = false;
+const RECOGNITION_STALL_TIMEOUT = 45_000;
+const TRANSLATION_TIMEOUT = 55_000;
+const AUTO_SCROLL_RESUME_DELAY = 10_000;
+const panelScrollStates = new WeakMap();
 
 for (let i = 0; i < 24; i += 1) {
   const bar = document.createElement('i');
@@ -91,11 +95,67 @@ function setStatus(message, isError = false) {
   statusMessage.classList.toggle('error', isError);
 }
 
+function getPanelScrollState(container) {
+  if (!panelScrollStates.has(container)) {
+    panelScrollStates.set(container, { pauseUntil: 0, resumeTimer: null });
+  }
+  return panelScrollStates.get(container);
+}
+
+function isPanelAtBottom(container) {
+  return container.scrollHeight - container.scrollTop - container.clientHeight <= 24;
+}
+
+function scrollPanelToLatest(container) {
+  const state = getPanelScrollState(container);
+  state.pauseUntil = 0;
+  clearTimeout(state.resumeTimer);
+  state.resumeTimer = null;
+  container.scrollTop = container.scrollHeight;
+}
+
+function pausePanelAutoScroll(container) {
+  const state = getPanelScrollState(container);
+  state.pauseUntil = Date.now() + AUTO_SCROLL_RESUME_DELAY;
+  clearTimeout(state.resumeTimer);
+  state.resumeTimer = setTimeout(() => scrollPanelToLatest(container), AUTO_SCROLL_RESUME_DELAY);
+}
+
+function updatePanelScroll(container, previousScrollTop) {
+  const state = getPanelScrollState(container);
+  requestAnimationFrame(() => {
+    if (state.pauseUntil > Date.now()) {
+      container.scrollTop = Math.min(previousScrollTop, container.scrollHeight);
+      return;
+    }
+    scrollPanelToLatest(container);
+  });
+}
+
+function setupPanelAutoScroll(container) {
+  container.addEventListener('wheel', () => {
+    pausePanelAutoScroll(container);
+    setTimeout(() => {
+      if (isPanelAtBottom(container)) scrollPanelToLatest(container);
+    }, 80);
+  }, { passive: true });
+  container.addEventListener('touchmove', () => pausePanelAutoScroll(container), { passive: true });
+  container.addEventListener('pointerdown', (event) => {
+    const bounds = container.getBoundingClientRect();
+    if (event.clientX >= bounds.right - 20) pausePanelAutoScroll(container);
+  });
+  container.addEventListener('scroll', () => {
+    if (isPanelAtBottom(container)) scrollPanelToLatest(container);
+  });
+}
+
 function renderPanel(container, type) {
   const isTarget = type === 'target';
+  const previousScrollTop = container.scrollTop;
   const empty = `<div class="empty-state"><span class="empty-icon">${isTarget ? 'A<span>文</span>' : '<svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></svg>'}</span><p>${isTarget ? '译文将随原文同步生成<br />无需复制或切换页面' : '点击下方麦克风<br />开始说话，原文会出现在这里'}</p></div>`;
   if (!entries.length && !interimText) {
     container.innerHTML = empty;
+    scrollPanelToLatest(container);
     return;
   }
 
@@ -113,7 +173,7 @@ function renderPanel(container, type) {
   const liveText = isTarget ? interimTranslation : interimText;
   const liveHtml = interimText ? `<article class="transcript-entry interim-entry"><time class="entry-time">现在</time><div><p class="entry-text">${escapeHtml(liveText || (isTarget ? '聆听中…' : ''))}</p></div></article>` : '';
   container.innerHTML = finalHtml + liveHtml;
-  requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+  updatePanelScroll(container, previousScrollTop);
 }
 
 function render() {
@@ -133,8 +193,10 @@ function retryFailedTranslations() {
 async function checkBackendRecovery() {
   if (backendCheckInFlight || backendAvailable) return;
   backendCheckInFlight = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch('/api/health', { cache: 'no-store' });
+    const response = await fetch('/api/health', { cache: 'no-store', signal: controller.signal });
     if (!response.ok) throw new Error('Backend is unavailable');
     backendAvailable = true;
     clearInterval(backendCheckTimer);
@@ -144,6 +206,7 @@ async function checkBackendRecovery() {
   } catch {
     backendAvailable = false;
   } finally {
+    clearTimeout(timeout);
     backendCheckInFlight = false;
   }
 }
@@ -162,10 +225,13 @@ function fetchTranslation(text) {
   if (translationCache.has(key)) return Promise.resolve(translationCache.get(key));
   if (translationRequests.has(key)) return translationRequests.get(key);
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TRANSLATION_TIMEOUT);
   const request = fetch('/api/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, source, target }),
+    signal: controller.signal,
   }).then(async (response) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || '翻译失败');
@@ -173,12 +239,19 @@ function fetchTranslation(text) {
     if (translationCache.size > 300) translationCache.delete(translationCache.keys().next().value);
     return data.translation;
   }).catch((error) => {
+    if (error.name === 'AbortError') {
+      scheduleBackendRecovery();
+      throw new Error('翻译请求超时，服务恢复后会自动重试');
+    }
     if (error instanceof TypeError && /fetch/i.test(error.message)) {
       scheduleBackendRecovery();
       throw new Error('翻译服务未连接，恢复后会自动重试');
     }
     throw error;
-  }).finally(() => translationRequests.delete(key));
+  }).finally(() => {
+    clearTimeout(timeout);
+    translationRequests.delete(key);
+  });
   translationRequests.set(key, request);
   return request;
 }
@@ -289,14 +362,24 @@ function startRecognitionWatchdog() {
   clearInterval(recognitionWatchdog);
   recognitionWatchdog = setInterval(() => {
     if (!recording) return;
+    if (audioContext?.state === 'suspended') audioContext.resume().catch(() => {});
     const now = Date.now();
     if (!recognitionActive && recognitionStartingAt && now - recognitionStartingAt > 12_000) {
       restartStalledRecognition('识别服务启动超时，正在自动重试；已有内容会保留');
       return;
     }
+    if (!recognitionActive && !recognitionStartingAt && !reconnectTimer) {
+      setStatus('识别连接已暂停，正在自动恢复；已有内容会保留', true);
+      scheduleRecognitionRestart();
+      return;
+    }
     const hasRecentSound = lastSoundAt && now - lastSoundAt < 5000;
     if (recognitionActive && hasRecentSound && now - lastRecognitionActivity > 18_000) {
       restartStalledRecognition('检测到识别无响应，正在自动恢复；已有内容会保留');
+      return;
+    }
+    if (recognitionActive && now - lastRecognitionActivity > RECOGNITION_STALL_TIMEOUT) {
+      restartStalledRecognition('正在刷新语音识别连接；已有内容会保留');
     }
   }, 2000);
 }
@@ -655,6 +738,8 @@ window.addEventListener('beforeunload', () => {
 });
 
 setupRecognition();
+setupPanelAutoScroll(sourceTranscript);
+setupPanelAutoScroll(targetTranscript);
 if (!SpeechRecognition) {
   setStatus('当前浏览器不支持实时语音识别，请用最新版 Edge 或 Chrome 打开', true);
   $('#supportNote').textContent = '需要 Edge / Chrome';
