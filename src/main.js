@@ -55,6 +55,9 @@ let translationJobs = [];
 let activeTranslations = 0;
 const translationCache = new Map();
 const translationRequests = new Map();
+let backendAvailable = true;
+let backendCheckTimer;
+let backendCheckInFlight = false;
 
 for (let i = 0; i < 24; i += 1) {
   const bar = document.createElement('i');
@@ -122,6 +125,36 @@ function render() {
   $('#exportButton').disabled = !entries.length;
 }
 
+function retryFailedTranslations() {
+  entries.filter((entry) => entry.status === 'error').forEach((entry) => translateEntry(entry));
+  if (interimText) scheduleInterimTranslation();
+}
+
+async function checkBackendRecovery() {
+  if (backendCheckInFlight || backendAvailable) return;
+  backendCheckInFlight = true;
+  try {
+    const response = await fetch('/api/health', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Backend is unavailable');
+    backendAvailable = true;
+    clearInterval(backendCheckTimer);
+    backendCheckTimer = null;
+    setStatus('翻译服务已恢复，正在自动重试失败内容');
+    retryFailedTranslations();
+  } catch {
+    backendAvailable = false;
+  } finally {
+    backendCheckInFlight = false;
+  }
+}
+
+function scheduleBackendRecovery() {
+  backendAvailable = false;
+  setStatus('翻译服务连接中断，正在自动检查；已有原文会保留', true);
+  if (!backendCheckTimer) backendCheckTimer = setInterval(checkBackendRecovery, 5000);
+  checkBackendRecovery();
+}
+
 function fetchTranslation(text) {
   const source = languageMeta[sourceLanguage.value]?.name || 'auto';
   const target = targetLanguage.value;
@@ -139,6 +172,12 @@ function fetchTranslation(text) {
     translationCache.set(key, data.translation);
     if (translationCache.size > 300) translationCache.delete(translationCache.keys().next().value);
     return data.translation;
+  }).catch((error) => {
+    if (error instanceof TypeError && /fetch/i.test(error.message)) {
+      scheduleBackendRecovery();
+      throw new Error('翻译服务未连接，恢复后会自动重试');
+    }
+    throw error;
   }).finally(() => translationRequests.delete(key));
   translationRequests.set(key, request);
   return request;
@@ -606,7 +645,12 @@ targetTranscript.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') event.target.click();
 });
 
+window.addEventListener('online', () => {
+  if (!backendAvailable) checkBackendRecovery();
+});
+
 window.addEventListener('beforeunload', () => {
+  clearInterval(backendCheckTimer);
   audioStream?.getTracks().forEach((track) => track.stop());
 });
 

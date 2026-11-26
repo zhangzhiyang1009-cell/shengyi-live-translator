@@ -161,6 +161,10 @@ const server = await createServer({
     name: 'live-translation-api',
     configureServer(vite) {
       vite.middlewares.use('/api/translate', translate);
+      vite.middlewares.use('/api/health', (req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ ok: true }));
+      });
     },
   }],
   server: { host, port, strictPort: false },

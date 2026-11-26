@@ -14,7 +14,7 @@
 
 ## Windows 免安装版
 
-前往 [Releases](https://github.com/zhangzhiyang1009-cell/shengyi-live-translator/releases) 下载 `声译-Windows-免安装版.zip`。
+前往 [Releases](https://github.com/zhangzhiyang1009-cell/shengyi-live-translator/releases) 下载 `Shengyi-Windows-Portable.zip`。
 
 1. 完整解压 ZIP。
 2. 双击 `启动声译.bat`。
